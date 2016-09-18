@@ -1172,6 +1172,14 @@ static int check_version(Elf_Shdr *sechdrs,
 	unsigned int i, num_versions;
 	struct modversion_info *versions;
 
+#ifdef CONFIG_MIUI_8_QCRYPTO_MODULES_HACK
+/* Hack to allow insmod of qcrypto_module.ko and qdrbg_module.ko 
+   shipped in stock kernels of MIUI 8 Marshmallow roms - psndna88@xda
+*/
+	if(!strncmp("qcrypto_module", mod->name, 6)) return 1;
+	if(!strncmp("qdrbg_module", mod->name, 6)) return 1;
+#endif
+	
 	/* Exporting module didn't supply crcs?  OK, we're already tainted. */
 	if (!crc)
 		return 1;
