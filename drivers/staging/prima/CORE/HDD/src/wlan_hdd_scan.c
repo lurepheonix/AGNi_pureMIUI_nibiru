@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2015 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2016 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -514,7 +514,7 @@ static eHalStatus hdd_IndicateScanResult(hdd_scan_info_t *scanInfo, tCsrScanResu
    event.cmd = IWEVCUSTOM;
    p = custom;
    p += scnprintf(p, MAX_CUSTOM_LEN, " Age: %lu",
-                 vos_timer_get_system_ticks() - descriptor->nReceivedTime);
+                 vos_timer_get_system_time() - descriptor->nReceivedTime);
    event.u.data.length = p - custom;
    current_event = iwe_stream_add_point (scanInfo->info,current_event, end,
                                          &event, custom);
@@ -542,10 +542,15 @@ static eHalStatus hdd_IndicateScanResult(hdd_scan_info_t *scanInfo, tCsrScanResu
 
   --------------------------------------------------------------------------*/
 
-VOS_STATUS hdd_processSpoofMacAddrRequest(hdd_context_t *pHddCtx)
+void __hdd_processSpoofMacAddrRequest(struct work_struct *work)
 {
+    hdd_context_t *pHddCtx =
+        container_of(to_delayed_work(work), hdd_context_t, spoof_mac_addr_work);
 
     ENTER();
+
+    if (wlan_hdd_validate_context(pHddCtx))
+        return;
 
     mutex_lock(&pHddCtx->spoofMacAddr.macSpoofingLock);
 
@@ -556,7 +561,7 @@ VOS_STATUS hdd_processSpoofMacAddrRequest(hdd_context_t *pHddCtx)
                 pHddCtx->spoofMacAddr.isEnabled = FALSE;
                 mutex_unlock(&pHddCtx->spoofMacAddr.macSpoofingLock);
                 hddLog(LOGE, FL("Failed to generate random Mac Addr"));
-                return VOS_STATUS_E_FAILURE;
+                return;
         }
     }
 
@@ -584,7 +589,14 @@ VOS_STATUS hdd_processSpoofMacAddrRequest(hdd_context_t *pHddCtx)
 
     EXIT();
 
-    return VOS_STATUS_SUCCESS;
+    return;
+}
+
+void hdd_processSpoofMacAddrRequest(struct work_struct *work)
+{
+    vos_ssr_protect(__func__);
+    __hdd_processSpoofMacAddrRequest(work);
+    vos_ssr_unprotect(__func__);
 }
 
 /**---------------------------------------------------------------------------

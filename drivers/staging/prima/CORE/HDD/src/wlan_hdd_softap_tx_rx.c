@@ -96,6 +96,8 @@ extern void hdd_set_wlan_suspend_mode(bool suspend);
 #define HDD_SAP_TX_TIMEOUT_RATELIMIT_BURST    1
 #define HDD_SAP_TX_STALL_SSR_THRESHOLD        5
 #define HDD_SAP_TX_STALL_RECOVERY_THRESHOLD HDD_SAP_TX_STALL_SSR_THRESHOLD - 2
+#define HDD_SAP_TX_STALL_FATAL_EVENT_THRESHOLD    2
+
 
 static DEFINE_RATELIMIT_STATE(hdd_softap_tx_timeout_rs,                 \
                               HDD_SAP_TX_TIMEOUT_RATELIMIT_INTERVAL,    \
@@ -353,6 +355,13 @@ int hdd_softap_hard_start_xmit(struct sk_buff *skb, struct net_device *dev)
        return os_status;
    }
 
+   if (pHddCtx == NULL)
+   {
+      VOS_TRACE(VOS_MODULE_ID_HDD_SAP_DATA, VOS_TRACE_LEVEL_ERROR,
+            FL("pHddCtx is NULL"));
+      goto xmit_done;
+   }
+
    pDestMacAddress = (v_MACADDR_t*)skb->data;
    
    ++pAdapter->hdd_stats.hddTxRxStats.txXmitCalled;
@@ -444,6 +453,8 @@ int hdd_softap_hard_start_xmit(struct sk_buff *skb, struct net_device *dev)
     {
        VOS_TRACE( VOS_MODULE_ID_HDD_SAP_DATA, VOS_TRACE_LEVEL_WARN,
             "%s: station %d ac %d queue over limit %d", __func__, STAId, ac, pktListSize);
+       ++pAdapter->hdd_stats.hddTxRxStats.txXmitBackPressured;
+       ++pAdapter->hdd_stats.hddTxRxStats.txXmitBackPressuredAC[ac];
        pSapCtx->aStaInfo[STAId].txSuspended[ac] = VOS_TRUE;
        netif_stop_subqueue(dev, skb_get_queue_mapping(skb));
        txSuspended = VOS_TRUE;
@@ -762,6 +773,8 @@ void __hdd_softap_tx_timeout(struct net_device *dev)
                 "%s: Cannot recover from Data stall Issue SSR",
                 __func__);
       WLANTL_FatalError();
+      // reset count after issuing the SSR
+      pAdapter->hdd_stats.hddTxRxStats.continuousTxTimeoutCount = 0;
       return;
    }
 
@@ -776,7 +789,15 @@ void __hdd_softap_tx_timeout(struct net_device *dev)
       hdd_wmm_tx_snapshot(pAdapter);
       WLANTL_TLDebugMessage(WLANTL_DEBUG_TX_SNAPSHOT);
    }
-
+   /* Call fatal event if data stall is for
+    * HDD_TX_STALL_FATAL_EVENT_THRESHOLD times
+    */
+   if (HDD_SAP_TX_STALL_FATAL_EVENT_THRESHOLD ==
+       pAdapter->hdd_stats.hddTxRxStats.continuousTxTimeoutCount)
+      vos_fatal_event_logs_req(WLAN_LOG_TYPE_FATAL,
+                   WLAN_LOG_INDICATOR_HOST_DRIVER,
+                   WLAN_LOG_REASON_DATA_STALL,
+                   FALSE, TRUE);
 } 
 
 void hdd_softap_tx_timeout(struct net_device *dev)
