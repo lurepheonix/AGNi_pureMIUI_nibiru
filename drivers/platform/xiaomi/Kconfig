@@ -16,9 +16,15 @@ config MACH_XIAOMI_MSM8956
 menu "Xiaomi board selection"
 
 	config MACH_XIAOMI_KENZO
-		bool "XIAOMI_KENZO board"
+		bool "XIAOMI_KENZO board (MIUI MM)"
 		select MACH_XIAOMI_MSM8956
 		help
-		  Support for Xiaomi Redmi Note 3 variant
+		  Support for Xiaomi Redmi Note 3 variant (MIUI MM)
+
+	config MACH_XIAOMI_KENZO_CM
+		bool "XIAOMI_KENZO board (CM MM)"
+		select MACH_XIAOMI_MSM8956
+		help
+		  Support for Xiaomi Redmi Note 3 variant (CM MM)
 
 endmenu
