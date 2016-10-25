@@ -14,10 +14,11 @@
 /dts-v1/;
 
 #include "msm8956_cm.dtsi"
-#include "kenzo/msm8956-kenzo.dtsi"
+#include "kenzo/msm8956-kenzo_cm_led.dtsi"
 
 / {
 	model = "Qualcomm Technologies, Inc. MSM8956 MTP";
 	compatible = "qcom,msm8956-mtp", "qcom,msm8956", "qcom,mtp";
 	qcom,board-id= <8 0>;
 };
+
