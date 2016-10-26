@@ -13,8 +13,8 @@
 
 /dts-v1/;
 
-#include "msm8956_cm.dtsi"
-#include "kenzo/msm8956-kenzo.dtsi"
+#include "msm8956.dtsi"
+#include "kenzo/msm8956-kenzo_cm.dtsi"
 
 / {
 	model = "Qualcomm Technologies, Inc. MSM8956 MTP";

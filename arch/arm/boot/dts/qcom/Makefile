@@ -69,8 +69,8 @@ ifeq ($(CONFIG_MACH_XIAOMI_KENZO),y)
 dtb-$(CONFIG_ARCH_MSM8916) += msm8956-mtp-kenzo.dtb
 else
 ifeq ($(CONFIG_MACH_XIAOMI_KENZO_CM),y)
+dtb-$(CONFIG_ARCH_MSM8916) += msm8956-mtp-kenzo.dtb
 dtb-$(CONFIG_ARCH_MSM8916) += msm8956-mtp-kenzo_cm.dtb
-dtb-$(CONFIG_ARCH_MSM8916) += msm8956-mtp-kenzo_cm_led.dtb
 else
 dtb-$(CONFIG_ARCH_MSM8916) += msm8916-sim.dtb \
 	msm8916-rumi.dtb \
