@@ -13,6 +13,9 @@ echo " Cross-compiling AGNi pureMIUI-MM kernel ..."
 echo ""
 echo "Cleanup..."
 echo ""
+rm drivers/leds/leds-aw2013.ko
+rm drivers/leds/leds-aw2013_cm.ko
+
 cd $KERNELDIR/
 
 if [ ! -f $KERNELDIR/.config ];
