@@ -13,8 +13,6 @@ echo " Cross-compiling AGNi pureMIUI-MM kernel ..."
 echo ""
 echo "Cleanup..."
 echo ""
-rm drivers/leds/leds-aw2013.ko
-rm drivers/leds/leds-aw2013_cm.ko
 
 cd $KERNELDIR/
 
@@ -55,9 +53,7 @@ git apply -R goodix.patch && echo "   Goodix Patch Cleaned UP."
 rm $KERNELDIR/arch/arm/boot/dts/*.dtb
 rm $KERNELDIR/arch/arm64/boot/Image
 rm $KERNELDIR/arch/arm64/boot/Image.gz
-rm $KERNELDIR/arch/arm64/boot/Image.gz-dtb
 
 echo ""
 echo "AGNi pureMIUI-MM has been built for kenzo !!!"
-
 

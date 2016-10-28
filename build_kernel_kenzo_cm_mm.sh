@@ -13,8 +13,6 @@ echo " Cross-compiling AGNi pureCM-MM kernel ..."
 echo ""
 echo "Cleanup..."
 echo ""
-rm drivers/leds/leds-aw2013.ko
-rm drivers/leds/leds-aw2013_cm.ko
 
 cd $KERNELDIR/
 
@@ -41,41 +39,20 @@ echo ""
 echo "Generating Device Tree images ..."
 chmod +x $KERNELDIR/scripts/dtbtool_agni
 cd $KERNELDIR;
-# LED X 		Goodix X
-mv .git .git-halt
-rm $KERNELDIR/arch/arm/boot/dts/*.dtb
-make -j3 || exit 1
-mv .git-halt .git
+# Goodix X
 $KERNELDIR/scripts/dtbtool_agni -s 2048 -o $KERNELDIR/BUILT_kenzo-cm-mm/dt.img -p $KERNELDIR/scripts/dtc/ $KERNELDIR/arch/arm/boot/dts/
-# LED V 		Goodix X
-git apply led.patch && echo "   LED Patch applied ..."
-mv .git .git-halt
-rm $KERNELDIR/arch/arm/boot/dts/*.dtb
-make -j3 || exit 1
-mv .git-halt .git
-$KERNELDIR/scripts/dtbtool_agni -s 2048 -o $KERNELDIR/BUILT_kenzo-cm-mm/dt_led.img -p $KERNELDIR/scripts/dtc/ $KERNELDIR/arch/arm/boot/dts/
-# LED X 		Goodix V
-git apply -R led.patch && echo "   LED Patch removed ..."
+# Goodix V
 git apply goodix.patch && echo "   Goodix Patch applied ..."
 mv .git .git-halt
 rm $KERNELDIR/arch/arm/boot/dts/*.dtb
 make -j3 || exit 1
 mv .git-halt .git
 $KERNELDIR/scripts/dtbtool_agni -s 2048 -o $KERNELDIR/BUILT_kenzo-cm-mm/dt_goodix.img -p $KERNELDIR/scripts/dtc/ $KERNELDIR/arch/arm/boot/dts/
-# LED V 		Goodix V
-git apply led.patch && echo "   LED Patch applied ..."
-mv .git .git-halt
-rm $KERNELDIR/arch/arm/boot/dts/*.dtb
-make -j3 || exit 1
-mv .git-halt .git
-$KERNELDIR/scripts/dtbtool_agni -s 2048 -o $KERNELDIR/BUILT_kenzo-cm-mm/dt_led_goodix.img -p $KERNELDIR/scripts/dtc/ $KERNELDIR/arch/arm/boot/dts/
-git apply -R led.patch && echo "   LED Patch Cleaned UP."
 git apply -R goodix.patch && echo "   Goodix Patch Cleaned UP."
 rm $KERNELDIR/arch/arm/boot/dts/*.dtb
 rm $KERNELDIR/arch/arm64/boot/Image
 rm $KERNELDIR/arch/arm64/boot/Image.gz
-rm $KERNELDIR/arch/arm64/boot/Image.gz-dtb
 
+echo ""
 echo "AGNi pureCM-MM has been built for kenzo !!!"
-
 
