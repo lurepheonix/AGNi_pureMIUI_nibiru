@@ -581,7 +581,7 @@ static int32_t msm_actuator_move_focus(
 	if ((a_ctrl->region_size <= 0) ||
 		(a_ctrl->region_size > MAX_ACTUATOR_REGION) ||
 		(!move_params->ringing_params)) {
-		pr_err("Invalid-region size = %d, ringing_params = %pK\n",
+		pr_err("Invalid-region size = %d, ringing_params = %p\n",
 		a_ctrl->region_size, move_params->ringing_params);
 		return -EFAULT;
 	}
@@ -696,7 +696,7 @@ static int32_t msm_actuator_bivcm_move_focus(
 	if ((a_ctrl->region_size <= 0) ||
 		(a_ctrl->region_size > MAX_ACTUATOR_REGION) ||
 		(!move_params->ringing_params)) {
-		pr_err("Invalid-region size = %d, ringing_params = %pK\n",
+		pr_err("Invalid-region size = %d, ringing_params = %p\n",
 		a_ctrl->region_size, move_params->ringing_params);
 		return -EFAULT;
 	}
@@ -851,13 +851,6 @@ static int32_t msm_actuator_bivcm_init_step_table(
 	uint32_t qvalue = 0;
 	CDBG("Enter\n");
 
-	/* validate the actuator state */
-	if (a_ctrl->actuator_state != ACT_OPS_ACTIVE) {
-		pr_err("%s:%d invalid actuator_state %d\n"
-			, __func__, __LINE__, a_ctrl->actuator_state);
-		return -EINVAL;
-	}
-
 	for (; data_size > 0; data_size--) {
 		max_code_size *= 2;
 		mask |= (1 << i++);
@@ -952,11 +945,11 @@ static int32_t msm_actuator_init_step_table(struct msm_actuator_ctrl_t *a_ctrl,
 			, __func__, __LINE__, a_ctrl->actuator_state);
 		return -EINVAL;
 	}
-
-       for (; data_size > 0; data_size--)
+	for (; data_size > 0; data_size--)
 		max_code_size *= 2;
 
 	a_ctrl->max_code_size = max_code_size;
+
 	/* free the step_position_table to allocate a new one */
 	kfree(a_ctrl->step_position_table);
 	a_ctrl->step_position_table = NULL;
@@ -1383,7 +1376,7 @@ static int32_t msm_actuator_config(struct msm_actuator_ctrl_t *a_ctrl,
 {
 	struct msm_actuator_cfg_data *cdata =
 		(struct msm_actuator_cfg_data *)argp;
-	int32_t rc = -EINVAL;
+	int32_t rc = 0;
 	if (a_ctrl == NULL) {
 		pr_err("ERROR: a_ctrl is NULL");
 		return -EFAULT;
@@ -1397,7 +1390,7 @@ static int32_t msm_actuator_config(struct msm_actuator_ctrl_t *a_ctrl,
 		a_ctrl->actuator_state == ACT_DISABLE_STATE) {
 		pr_err("actuator disabled %d\n", rc);
 		mutex_unlock(a_ctrl->actuator_mutex);
-		return rc;
+		return -EINVAL;
 	}
 
 	switch (cdata->cfgtype) {
@@ -1409,7 +1402,6 @@ static int32_t msm_actuator_config(struct msm_actuator_ctrl_t *a_ctrl,
 	case CFG_GET_ACTUATOR_INFO:
 		cdata->is_af_supported = 1;
 		cdata->cfg.cam_name = a_ctrl->cam_name;
-		rc = 0;
 		break;
 
 	case CFG_SET_ACTUATOR_INFO:
@@ -1419,19 +1411,15 @@ static int32_t msm_actuator_config(struct msm_actuator_ctrl_t *a_ctrl,
 		break;
 
 	case CFG_SET_DEFAULT_FOCUS:
-		if (a_ctrl->func_tbl &&
-			a_ctrl->func_tbl->actuator_set_default_focus)
-			rc = a_ctrl->func_tbl->actuator_set_default_focus(
-				a_ctrl, &cdata->cfg.move);
+		rc = a_ctrl->func_tbl->actuator_set_default_focus(a_ctrl,
+			&cdata->cfg.move);
 		if (rc < 0)
 			pr_err("move focus failed %d\n", rc);
 		break;
 
 	case CFG_MOVE_FOCUS:
-		if (a_ctrl->func_tbl &&
-			a_ctrl->func_tbl->actuator_move_focus)
-			rc = a_ctrl->func_tbl->actuator_move_focus(a_ctrl,
-				&cdata->cfg.move);
+		rc = a_ctrl->func_tbl->actuator_move_focus(a_ctrl,
+			&cdata->cfg.move);
 		if (rc < 0)
 			pr_err("move focus failed %d\n", rc);
 		break;
@@ -1442,10 +1430,12 @@ static int32_t msm_actuator_config(struct msm_actuator_ctrl_t *a_ctrl,
 		break;
 
 	case CFG_SET_POSITION:
-		if (a_ctrl->func_tbl &&
-			a_ctrl->func_tbl->actuator_set_position)
+		if (a_ctrl != NULL && a_ctrl->func_tbl != NULL)
 			rc = a_ctrl->func_tbl->actuator_set_position(a_ctrl,
 				&cdata->cfg.setpos);
+		else
+			rc = -EFAULT;
+
 		if (rc < 0)
 			pr_err("actuator_set_position failed %d\n", rc);
 		break;
@@ -1543,7 +1533,7 @@ static long msm_actuator_subdev_ioctl(struct v4l2_subdev *sd,
 	struct msm_actuator_ctrl_t *a_ctrl = v4l2_get_subdevdata(sd);
 	void __user *argp = (void __user *)arg;
 	CDBG("Enter\n");
-	CDBG("%s:%d a_ctrl %pK argp %pK\n", __func__, __LINE__, a_ctrl, argp);
+	CDBG("%s:%d a_ctrl %p argp %p\n", __func__, __LINE__, a_ctrl, argp);
 	switch (cmd) {
 	case VIDIOC_MSM_SENSOR_GET_SUBDEV_ID:
 		return msm_actuator_get_subdev_id(a_ctrl, argp);
@@ -1785,7 +1775,7 @@ static int32_t msm_actuator_i2c_probe(struct i2c_client *client,
 		goto probe_failure;
 	}
 
-	CDBG("client = 0x%pK\n",  client);
+	CDBG("client = 0x%p\n",  client);
 
 	rc = of_property_read_u32(client->dev.of_node, "cell-index",
 		&act_ctrl_t->subdev_id);

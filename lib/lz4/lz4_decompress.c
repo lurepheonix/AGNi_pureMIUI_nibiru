@@ -72,8 +72,6 @@ static int lz4_uncompress(const char *source, char *dest, int osize)
 			len = *ip++;
 			for (; len == 255; length += 255)
 				len = *ip++;
-			if (unlikely(length > (size_t)(length + len)))
-				goto _output_error;
 			length += len;
 		}
 
@@ -108,8 +106,6 @@ static int lz4_uncompress(const char *source, char *dest, int osize)
 		if (length == ML_MASK) {
 			for (; *ip == 255; length += 255)
 				ip++;
-			if (unlikely(length > (size_t)(length + *ip)))
-				goto _output_error;
 			length += *ip++;
 		}
 
@@ -159,7 +155,7 @@ static int lz4_uncompress(const char *source, char *dest, int osize)
 
 	/* write overflow error detected */
 _output_error:
-	return -1;
+	return (int) (-(((char *)ip) - source));
 }
 
 static int lz4_uncompress_unknownoutputsize(const char *source, char *dest,
@@ -303,7 +299,7 @@ exit_0:
 	return ret;
 }
 #ifndef STATIC
-EXPORT_SYMBOL(lz4_decompress);
+EXPORT_SYMBOL_GPL(lz4_decompress);
 #endif
 
 int lz4_decompress_unknownoutputsize(const unsigned char *src, size_t src_len,
@@ -323,8 +319,8 @@ exit_0:
 	return ret;
 }
 #ifndef STATIC
-EXPORT_SYMBOL(lz4_decompress_unknownoutputsize);
+EXPORT_SYMBOL_GPL(lz4_decompress_unknownoutputsize);
 
-MODULE_LICENSE("Dual BSD/GPL");
+MODULE_LICENSE("GPL");
 MODULE_DESCRIPTION("LZ4 Decompressor");
 #endif
