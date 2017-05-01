@@ -25,7 +25,7 @@
 #include <linux/module.h>
 #include <linux/kthread.h>
 
-static int touchboost = 0;
+static int touchboost = 1;
 
 static struct mutex managed_cpus_lock;
 
@@ -446,9 +446,6 @@ static int set_cpu_max_freq(const char *buf, const struct kernel_param *kp)
 
 	if (msm_perf == 0)
 		return ret;
-
-	if (touchboost == 0)
-		return 0;
 
 	while ((cp = strpbrk(cp + 1, " :")))
 		ntokens++;
