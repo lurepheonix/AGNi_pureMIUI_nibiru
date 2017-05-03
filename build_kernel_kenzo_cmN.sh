@@ -1,7 +1,9 @@
 #!/bin/sh
 export KERNELDIR=`readlink -f .`
-. ~/WORKING_DIRECTORY/AGNi_stamp_CM.sh
-. ~/WORKING_DIRECTORY/gcc-6.x-uber_aarch64.sh
+export CROSS_COMPILE=/home/lurepheonix/android/ubertc6/bin/aarch64-linux-android-
+export ARCH=arm64
+#. ~/WORKING_DIRECTORY/AGNi_stamp_CM.sh
+#. ~/WORKING_DIRECTORY/gcc-6.x-uber_aarch64.sh
 #. ~/WORKING_DIRECTORY/gcc-7.x-uber_aarch64.sh
 
 echo ""
