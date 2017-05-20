@@ -25,7 +25,6 @@
 #include <linux/display_state.h>
 #include "mdss_dsi.h"
 #include "mdss_dba_utils.h"
-#include "mdss_mdp.h"
 
 #include "mdss_livedisplay.h"
 #ifdef CONFIG_WAKE_GESTURES
@@ -66,8 +65,6 @@ bool is_display_on()
 	return display_on;
 }
 EXPORT_SYMBOL(is_display_on);
-
-u32 mdss_min_brightness;
 
 void mdss_dsi_panel_pwm_cfg(struct mdss_dsi_ctrl_pdata *ctrl)
 {
@@ -210,7 +207,7 @@ void mdss_dsi_panel_cmds_send(struct mdss_dsi_ctrl_pdata *ctrl,
 
 static char led_pwm1[2] = {0x51, 0x0};	/* DTYPE_DCS_WRITE1 */
 static struct dsi_cmd_desc backlight_cmd = {
-	{DTYPE_DCS_WRITE1, 1, 0, 0, 1, sizeof(led_pwm1)},
+	{DTYPE_DCS_WRITE1, 1, 0, 0, 0, sizeof(led_pwm1)},
 	led_pwm1
 };
 
@@ -702,8 +699,6 @@ static void mdss_dsi_panel_bl_ctrl(struct mdss_panel_data *pdata,
 	 * than it, the controller can malfunction.
 	 */
 
-	pdata->panel_info.bl_min = mdss_min_brightness;
-
 	if ((bl_level < pdata->panel_info.bl_min) && (bl_level != 0))
 		bl_level = pdata->panel_info.bl_min;
 
@@ -763,11 +758,7 @@ static int mdss_dsi_panel_on(struct mdss_panel_data *pdata)
 
 	display_on = true;
 #ifdef CONFIG_WAKE_GESTURES
-	if ((dt2w_switch_temp) || (s2w_switch_temp)) {
-		if (debug_wake_timer)
-			pr_info("wake gesture: display on detected...\n");
-       		wake_gesture_resume_triggers();
-	}
+	wake_gesture_main();
 #endif
 #ifdef CONFIG_LAZYPLUG
 	lazyplug_enter_lazy(false); 
@@ -891,11 +882,7 @@ static int mdss_dsi_panel_off(struct mdss_panel_data *pdata)
 	display_on = false;
 
 #ifdef CONFIG_WAKE_GESTURES
-	if ((dt2w_switch_temp) || (s2w_switch_temp)) {
-		if (debug_wake_timer)
-			pr_info("wake gesture: display off detected...\n");
-	       	wake_gesture_suspend_triggers();
-	}
+	wake_gesture_main();
 #endif
 #ifdef CONFIG_LAZYPLUG
 	lazyplug_enter_lazy(true);
@@ -2132,7 +2119,6 @@ static int mdss_panel_parse_dt(struct device_node *np,
 	pinfo->brightness_max = (!rc ? tmp : MDSS_MAX_BL_BRIGHTNESS);
 	rc = of_property_read_u32(np, "qcom,mdss-dsi-bl-min-level", &tmp);
 	pinfo->bl_min = (!rc ? tmp : 0);
-	mdss_min_brightness = pinfo->bl_min;
 	rc = of_property_read_u32(np, "qcom,mdss-dsi-bl-max-level", &tmp);
 	pinfo->bl_max = (!rc ? tmp : 255);
 	ctrl_pdata->bklt_max = pinfo->bl_max;

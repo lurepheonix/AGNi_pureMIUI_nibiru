@@ -48,10 +48,6 @@
 #include <linux/fastcharge.h>
 #endif
 
-#ifdef CONFIG_MACH_XIAOMI_KENZO
-int FG_charger_status = 0;
-#endif
-
 /* Mask/Bit helpers */
 #define _SMB_MASK(BITS, POS) \
 	((unsigned char)(((1 << (BITS)) - 1) << (POS)))
@@ -399,7 +395,7 @@ enum battchg_enable_voters {
 	NUM_BATTCHG_EN_VOTERS,
 };
 
-static int smbchg_debug_mask = PR_STATUS | PR_MISC | PR_INTERRUPT;
+static int smbchg_debug_mask = 0;
 module_param_named(
 	debug_mask, smbchg_debug_mask, int, S_IRUSR | S_IWUSR
 );
@@ -421,7 +417,7 @@ module_param_named(
 	int, S_IRUSR | S_IWUSR
 );
 
-static int smbchg_default_hvdcp_icl_ma = 1500;
+static int smbchg_default_hvdcp_icl_ma = 2000;
 module_param_named(
 	default_hvdcp_icl_ma, smbchg_default_hvdcp_icl_ma,
 	int, S_IRUSR | S_IWUSR
@@ -458,21 +454,8 @@ module_param_named(
 	int, S_IRUSR | S_IWUSR
 );
 
-#define pr_smb(reason, fmt, ...)				\
-	do {							\
-		if (smbchg_debug_mask & (reason))		\
-			pr_info_ratelimited(fmt, ##__VA_ARGS__);		\
-		else						\
-			pr_debug_ratelimited(fmt, ##__VA_ARGS__);		\
-	} while (0)
-
-#define pr_smb_rt(reason, fmt, ...)					\
-	do {								\
-		if (smbchg_debug_mask & (reason))			\
-			pr_info_ratelimited(fmt, ##__VA_ARGS__);	\
-		else							\
-			pr_debug_ratelimited(fmt, ##__VA_ARGS__);	\
-	} while (0)
+#define pr_smb(reason, fmt, ...)
+#define pr_smb_rt(reason, fmt, ...)
 
 static int smbchg_read(struct smbchg_chip *chip, u8 *val,
 			u16 addr, int count)
@@ -1038,7 +1021,7 @@ static int get_prop_batt_capacity(struct smbchg_chip *chip)
 
 	if (is_usb_present(chip)
 			&& (POWER_SUPPLY_STATUS_FULL == get_prop_batt_status(chip))
-			&& get_prop_batt_voltage_now(chip) > 4300000)
+			&& get_prop_batt_voltage_now(chip) > 4400000)
 		capacity = 100;
 
 	return capacity;
@@ -1831,7 +1814,13 @@ static int smbchg_set_fastchg_current_raw(struct smbchg_chip *chip,
 #define USBIN_ACTIVE_PWR_SRC_BIT	BIT(1)
 #define DCIN_ACTIVE_PWR_SRC_BIT		BIT(0)
 #define PARALLEL_REENABLE_TIMER_MS	1000
-#define PARALLEL_CHG_THRESHOLD_CURRENT	2400
+#define PARALLEL_CHG_THRESHOLD_CURRENT	2000
+int smbchg_parallel_chg_threshold_ma = PARALLEL_CHG_THRESHOLD_CURRENT;
+module_param_named(
+	default_parallel_chg_threshold, smbchg_parallel_chg_threshold_ma,
+	int, S_IRUSR | S_IWUSR
+);
+
 static bool smbchg_is_usbin_active_pwr_src(struct smbchg_chip *chip)
 {
 	int rc;
@@ -2291,7 +2280,8 @@ static void smbchg_parallel_usb_en_work(struct work_struct *work)
 	return;
 
 recheck:
-	schedule_delayed_work(&chip->parallel_en_work, 0);
+	queue_delayed_work(system_power_efficient_wq,
+		&chip->parallel_en_work, 0);
 }
 
 static void smbchg_parallel_usb_check_ok(struct smbchg_chip *chip)
@@ -2302,7 +2292,8 @@ static void smbchg_parallel_usb_check_ok(struct smbchg_chip *chip)
 		return;
 
 	smbchg_stay_awake(chip, PM_PARALLEL_CHECK);
-	schedule_delayed_work(&chip->parallel_en_work, 0);
+	queue_delayed_work(system_power_efficient_wq,
+		&chip->parallel_en_work, 0);
 }
 
 static int charging_suspend_vote_cb(struct device *dev, int suspend,
@@ -3090,7 +3081,8 @@ static void smbchg_vfloat_adjust_check(struct smbchg_chip *chip)
 
 	smbchg_stay_awake(chip, PM_REASON_VFLOAT_ADJUST);
 	pr_smb(PR_STATUS, "Starting vfloat adjustments\n");
-	schedule_delayed_work(&chip->vfloat_adjust_work, 0);
+	queue_delayed_work(system_power_efficient_wq,
+		&chip->vfloat_adjust_work, 0);
 }
 
 #define FV_STS_REG			0xC
@@ -4191,7 +4183,8 @@ stop:
 	return;
 
 reschedule:
-	schedule_delayed_work(&chip->vfloat_adjust_work,
+	queue_delayed_work(system_power_efficient_wq,
+		&chip->vfloat_adjust_work,
 			msecs_to_jiffies(VFLOAT_RESAMPLE_DELAY_MS));
 	return;
 }
@@ -4199,14 +4192,8 @@ reschedule:
 static int smbchg_charging_status_change(struct smbchg_chip *chip)
 {
 	smbchg_vfloat_adjust_check(chip);
-#ifdef CONFIG_MACH_XIAOMI_KENZO
-	FG_charger_status = get_prop_batt_status(chip);
-	set_property_on_fg(chip, POWER_SUPPLY_PROP_STATUS,
-			FG_charger_status);
-#else
 	set_property_on_fg(chip, POWER_SUPPLY_PROP_STATUS,
 			get_prop_batt_status(chip));
-#endif
 	return 0;
 }
 
@@ -4393,10 +4380,12 @@ static void smbchg_reg_work(struct work_struct *work)
 
 	dump_regs(chip);
 	if (chip->usb_present)
-		schedule_delayed_work(&chip->reg_work,
+		queue_delayed_work(system_power_efficient_wq,
+			&chip->reg_work,
 			CHARGING_PERIOD_MS * HZ);
 	else
-		schedule_delayed_work(&chip->reg_work,
+		queue_delayed_work(system_power_efficient_wq,
+			&chip->reg_work,
 			NOT_CHARGING_PERIOD_MS * HZ);
 }
 
@@ -4649,8 +4638,9 @@ static void handle_usb_insertion(struct smbchg_chip *chip)
 	schedule_work(&chip->usb_set_online_work);
 
 	if (usb_supply_type == POWER_SUPPLY_TYPE_USB_DCP)
-		schedule_delayed_work(&chip->hvdcp_det_work,
-					msecs_to_jiffies(HVDCP_NOTIFY_MS));
+		queue_delayed_work(system_power_efficient_wq,
+			&chip->hvdcp_det_work,
+				msecs_to_jiffies(HVDCP_NOTIFY_MS));
 
 	smbchg_detect_parallel_charger(chip);
 
@@ -4679,14 +4669,8 @@ void update_usb_status(struct smbchg_chip *chip, bool usb_present, bool force)
 	}
 
 	/* update FG */
-#ifdef CONFIG_MACH_XIAOMI_KENZO
-	FG_charger_status = get_prop_batt_status(chip);
-	set_property_on_fg(chip, POWER_SUPPLY_PROP_STATUS,
-			FG_charger_status);
-#else
 	set_property_on_fg(chip, POWER_SUPPLY_PROP_STATUS,
 			get_prop_batt_status(chip));
-#endif
 unlock:
 	mutex_unlock(&chip->usb_status_lock);
 }
@@ -4941,7 +4925,8 @@ static void smbchg_handle_hvdcp3_disable(struct smbchg_chip *chip)
 		read_usb_type(chip, &usb_type_name, &usb_supply_type);
 		smbchg_change_usb_supply_type(chip, usb_supply_type);
 		if (usb_supply_type == POWER_SUPPLY_TYPE_USB_DCP)
-			schedule_delayed_work(&chip->hvdcp_det_work,
+			queue_delayed_work(system_power_efficient_wq,
+				&chip->hvdcp_det_work,
 				msecs_to_jiffies(HVDCP_NOTIFY_MS));
 	}
 }
@@ -5703,11 +5688,14 @@ void lct_charging_adjust(struct smbchg_chip *chip)
 	return;
 	board_temp = lct_get_prop_batt_temp(chip);
 	if (board_temp < 500)
-		schedule_delayed_work(&chip->boardtemp_work, msecs_to_jiffies(30000));
+		queue_delayed_work(system_power_efficient_wq,
+			&chip->boardtemp_work, msecs_to_jiffies(30000));
 	else if (board_temp < 540)
-		schedule_delayed_work(&chip->boardtemp_work, msecs_to_jiffies(10000));
+		queue_delayed_work(system_power_efficient_wq,
+			&chip->boardtemp_work, msecs_to_jiffies(10000));
 	else
-		schedule_delayed_work(&chip->boardtemp_work, msecs_to_jiffies(3000));
+		queue_delayed_work(system_power_efficient_wq,
+			&chip->boardtemp_work, msecs_to_jiffies(3000));
 
 	is_temp_rise = (board_temp - backup_temp) > 0 ? true : false;
 	backup_temp = board_temp;
@@ -6098,11 +6086,14 @@ static void smb_temp_work_fn(struct work_struct *work)
 	smb_for_batt_temp_too_high_too_low(chip, temp);
 	if (chip->usb_present) {
 		if (temp < 450)
-			schedule_delayed_work(&chip->temp_work, msecs_to_jiffies(30000));
+			queue_delayed_work(system_power_efficient_wq,
+				&chip->temp_work, msecs_to_jiffies(30000));
 		else if (temp < 500)
-			schedule_delayed_work(&chip->temp_work, msecs_to_jiffies(10000));
+			queue_delayed_work(system_power_efficient_wq,
+				&chip->temp_work, msecs_to_jiffies(10000));
 		else
-			schedule_delayed_work(&chip->temp_work, msecs_to_jiffies(3000));
+			queue_delayed_work(system_power_efficient_wq,
+				&chip->temp_work, msecs_to_jiffies(3000));
 	}
 }
 #endif
@@ -6378,10 +6369,12 @@ static irqreturn_t dcin_uv_handler(int irq, void *_chip)
 	}
 
 #if defined (CONFIG_TEMP_CHARGE_DISABLE)
-		schedule_delayed_work(&chip->temp_work, msecs_to_jiffies(1000));
+	queue_delayed_work(system_power_efficient_wq,
+		&chip->temp_work, msecs_to_jiffies(1000));
 #endif
 #if defined(CONFIG_BOARDTEMP_WORK)
-		schedule_delayed_work(&chip->boardtemp_work, msecs_to_jiffies(3000));
+	queue_delayed_work(system_power_efficient_wq,
+		&chip->boardtemp_work, msecs_to_jiffies(3000));
 #endif
 
 	smbchg_wipower_check(chip);
@@ -6622,9 +6615,9 @@ static irqreturn_t aicl_done_handler(int irq, void *_chip)
 {
 	struct smbchg_chip *chip = _chip;
 	bool usb_present = is_usb_present(chip);
-	int aicl_level = smbchg_get_aicl_level_ma(chip);
+/*	int aicl_level = smbchg_get_aicl_level_ma(chip);
 
-	pr_smb(PR_INTERRUPT, "triggered, aicl: %d\n", aicl_level);
+	pr_smb(PR_INTERRUPT, "triggered, aicl: %d\n", aicl_level); */
 
 	increment_aicl_count(chip);
 
@@ -6658,14 +6651,8 @@ static irqreturn_t usbid_change_handler(int irq, void *_chip)
 		pr_smb(PR_STATUS, "OTG detected\n");
 
 	/* update FG */
-#ifdef CONFIG_MACH_XIAOMI_KENZO
-	FG_charger_status = get_prop_batt_status(chip);
-	set_property_on_fg(chip, POWER_SUPPLY_PROP_STATUS,
-			FG_charger_status);
-#else
 	set_property_on_fg(chip, POWER_SUPPLY_PROP_STATUS,
 			get_prop_batt_status(chip));
-#endif
 
 	return IRQ_HANDLED;
 }
@@ -8170,7 +8157,8 @@ static int smbchg_probe(struct spmi_device *spmi)
 		power_supply_set_present(chip->usb_psy, chip->usb_present);
 	}
 
-	schedule_delayed_work(&chip->reg_work, 60 * HZ);
+	queue_delayed_work(system_power_efficient_wq,
+		&chip->reg_work, 60 * HZ);
 	create_debugfs_entries(chip);
 
 	rc = sysfs_create_file(&chip->dev->kobj, &attrs[0].attr);
@@ -8199,14 +8187,16 @@ static int smbchg_probe(struct spmi_device *spmi)
 	if (IS_ERR(chip->tzd))
 		pr_err("thermal_zone_device_register error!\n");
 	INIT_DELAYED_WORK(&chip->boardtemp_work, smb_boardtemp_work_fn);
-	schedule_delayed_work(&chip->boardtemp_work, msecs_to_jiffies(30000));
+	queue_delayed_work(system_power_efficient_wq,
+		&chip->boardtemp_work, msecs_to_jiffies(30000));
 
 #endif
 #if defined(CONFIG_TEMP_CHARGE_DISABLE)
 	{
 		pr_debug("support lct temp high func, init");
 		INIT_DELAYED_WORK(&chip->temp_work, smb_temp_work_fn);
-		schedule_delayed_work(&chip->temp_work, msecs_to_jiffies(5000));
+		queue_delayed_work(system_power_efficient_wq,
+			&chip->temp_work, msecs_to_jiffies(5000));
 	}
 #endif
 

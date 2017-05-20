@@ -2588,8 +2588,8 @@ static void mass_storage_function_enable(struct android_usb_function *f)
 			if (lun_type)
 				number_of_luns =
 					mass_storage_lun_init(f, lun_type);
-				if (number_of_luns <= 0)
-					return;
+			if (number_of_luns <= 0)
+				return;
 		}
 	} else {
 		pr_debug("No extra msc lun required.\n");
@@ -2604,7 +2604,7 @@ static void mass_storage_function_enable(struct android_usb_function *f)
 
 	pr_debug("fsg.nluns:%d\n", config->fsg.nluns);
 	for (i = prev_nluns; i < config->fsg.nluns; i++) {
-		snprintf(lun_name, sizeof(buf), "lun%d", (i-prev_nluns));
+		snprintf(lun_name, sizeof(buf1), "lun%d", (i-prev_nluns));
 		pr_debug("sysfs: LUN name:%s\n", lun_name);
 		err = sysfs_create_link(&f->dev->kobj,
 			&common->luns[i].dev.kobj, lun_name);

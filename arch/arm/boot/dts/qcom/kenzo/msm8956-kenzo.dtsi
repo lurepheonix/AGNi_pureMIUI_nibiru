@@ -1521,7 +1521,7 @@
 		qcom,msm-bus,name = "qseecom-noc";
 		qcom,disk-encrypt-pipe-pair = <2>;
 		qcom,support-fde;
-		/*qcom,appsbl-qseecom-support;*/
+		qcom,appsbl-qseecom-support;
 		qcom,msm-bus,num-cases = <4>;
 		qcom,msm-bus,num-paths = <1>;
 		qcom,support-bus-scaling;
@@ -2620,13 +2620,6 @@
 	qcom,support-hw-trigger;
 	clock-names ="core0_clk";
 	clocks = <&clock_gcc clk_gcc_venus0_core0_vcodec0_clk>;
-	status = "okay";
-};
-
-&gdsc_venus_core1 {
-	qcom,support-hw-trigger;
-	clock-names ="core1_clk";
-	clocks = <&clock_gcc clk_gcc_venus0_core1_vcodec0_clk>;
 	status = "okay";
 };
 
