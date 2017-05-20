@@ -239,10 +239,10 @@ static struct fg_mem_setting settings[FG_MEM_SETTING_MAX] = {
 	SETTING(BCL_MH_THRESHOLD, 0x47C,   3,      752),
 	SETTING(TERM_CURRENT,	 0x40C,   2,      250),
 	SETTING(CHG_TERM_CURRENT, 0x4F8,   2,      250),
-	SETTING(IRQ_VOLT_EMPTY,	 0x458,   3,      3350),
+	SETTING(IRQ_VOLT_EMPTY,	 0x458,   3,      3100),
 	SETTING(CUTOFF_VOLTAGE,	 0x40C,   0,      3400),
 	SETTING(VBAT_EST_DIFF,	 0x000,   0,      30),
-	SETTING(DELTA_SOC,	 0x450,   3,      2),
+	SETTING(DELTA_SOC,	 0x450,   3,      1),
 	SETTING(SOC_MAX,	 0x458,   1,      85),
 	SETTING(SOC_MIN,	 0x458,   2,      15),
 	SETTING(BATT_LOW,	 0x458,   0,      4200),
@@ -461,7 +461,6 @@ struct fg_chip {
 	struct delayed_work	update_sram_data;
 	struct delayed_work	update_temp_work;
 	struct delayed_work	check_empty_work;
-	struct delayed_work	soc_work;
 	char			*batt_profile;
 	u8			thermal_coefficients[THERMAL_COEFF_N_BYTES];
 	u32			cc_cv_threshold_mv;
@@ -2066,24 +2065,6 @@ static void update_sram_data(struct fg_chip *chip, int *resched_ms)
 	fg_relax(&chip->update_sram_wakeup_source);
 }
 
-#define SOC_WORK_MS	20000
-static void soc_work_fn(struct work_struct *work)
-{	struct fg_chip *chip = container_of(work,
-				struct fg_chip,
-				soc_work.work);
-	pr_debug("adjust_soc: s %d r %d i %d v %d t %d\n",
-			get_prop_capacity(chip),
-			get_sram_prop_now(chip, FG_DATA_BATT_SOC),
-			get_sram_prop_now(chip, FG_DATA_CURRENT),
-			get_sram_prop_now(chip, FG_DATA_VOLTAGE),
-			get_sram_prop_now(chip, FG_DATA_BATT_TEMP));
-
-	queue_delayed_work(system_power_efficient_wq,
-		&chip->soc_work,
-		msecs_to_jiffies(SOC_WORK_MS));
-
-}
-
 #define SRAM_TIMEOUT_MS			3000
 static void update_sram_data_work(struct work_struct *work)
 {
@@ -2957,9 +2938,10 @@ static int fg_cap_learning_process_full_data(struct fg_chip *chip)
 			100);
 	chip->learning_data.cc_uah = delta_cc_uah + chip->learning_data.cc_uah;
 
-	pr_info("current cc_soc=%d cc_soc_pc=%lld total_cc_uah = %lld delta_cc_uah = %lld\n",
-		cc_pc_val, cc_soc_delta_pc,
-		chip->learning_data.cc_uah, delta_cc_uah);
+	if (fg_debug_mask & FG_AGING)
+		pr_info("current cc_soc=%d cc_soc_pc=%lld total_cc_uah = %lld delta_cc_uah = %lld\n",
+				cc_pc_val, cc_soc_delta_pc,
+				chip->learning_data.cc_uah, delta_cc_uah);
 
 	return 0;
 
@@ -3079,9 +3061,10 @@ static void fg_cap_learning_post_process(struct fg_chip *chip)
 			chip->learning_data.cc_uah;
 
 	fg_cap_learning_save_data(chip);
-	pr_info("final cc_uah = %lld, learned capacity %lld -> %lld uah\n",
-		chip->learning_data.cc_uah,
-		old_cap, chip->learning_data.learned_cc_uah);
+	if (fg_debug_mask & FG_AGING)
+		pr_info("final cc_uah = %lld, learned capacity %lld -> %lld uah\n",
+				chip->learning_data.cc_uah,
+				old_cap, chip->learning_data.learned_cc_uah);
 }
 
 static int get_vbat_est_diff(struct fg_chip *chip)
@@ -3161,7 +3144,8 @@ static int fg_cap_learning_check(struct fg_chip *chip)
 
 			chip->learning_data.init_cc_pc_val = cc_pc_val;
 			chip->learning_data.active = true;
-			pr_info("SW_CC_SOC based learning init_CC_SOC=%d\n",
+			if (fg_debug_mask & FG_AGING)
+				pr_info("SW_CC_SOC based learning init_CC_SOC=%d\n",
 					chip->learning_data.init_cc_pc_val);
 		} else {
 			rc = fg_mem_masked_write(chip, CBITS_INPUT_FILTER_REG,
@@ -3315,14 +3299,7 @@ static void status_change_work(struct work_struct *work)
 			chip->status == POWER_SUPPLY_STATUS_CHARGING) {
 #ifdef CONFIG_WAKE_GESTURES
 		wake_is_charging = true;
-		if ((dt2w_switch_temp) || (s2w_switch_temp)) {
-			if (debug_wake_timer)
-				pr_info("wake gesture: qpnp-fg: charging detected\n");
-			if (wake_duration)
-				wake_gesture_delayed_shut_destroy();
-			if (!q6voice_voice_session_active())
-				wake_gesture_switches_resume();
-		}
+       	wake_gesture_main();
 #endif
 		if (!chip->vbat_low_irq_enabled) {
 			enable_irq(chip->batt_irq[VBATT_LOW].irq);
@@ -3334,14 +3311,7 @@ static void status_change_work(struct work_struct *work)
 	} else if (chip->status == POWER_SUPPLY_STATUS_DISCHARGING) {
 #ifdef CONFIG_WAKE_GESTURES
 		wake_is_charging = false;
-		if ((dt2w_switch_temp) || (s2w_switch_temp)) {
-			if (debug_wake_timer)
-				pr_info("wake gesture:  qpnp-fg: charging not detected\n");
-			if (wake_duration)
-				wake_gesture_delayed_shut_destroy();
-			if (!q6voice_voice_session_active())
-				wake_gesture_switches_resume();
-		}
+       	wake_gesture_main();
 #endif
 		if (chip->vbat_low_irq_enabled) {
 			disable_irq_wake(chip->batt_irq[VBATT_LOW].irq);
@@ -5272,7 +5242,6 @@ static int fg_init_irqs(struct fg_chip *chip)
 
 static void fg_cleanup(struct fg_chip *chip)
 {
-	cancel_delayed_work_sync(&chip->soc_work);
 	cancel_delayed_work_sync(&chip->update_sram_data);
 	cancel_delayed_work_sync(&chip->update_temp_work);
 	cancel_delayed_work_sync(&chip->update_jeita_setting);
@@ -6127,9 +6096,6 @@ static void delayed_init_work(struct work_struct *work)
 	if (chip->last_temp_update_time == 0)
 		update_temp_data(&chip->update_temp_work.work);
 
-	queue_delayed_work(system_power_efficient_wq,
-		&chip->soc_work,
-		msecs_to_jiffies(SOC_WORK_MS));
 	if (!chip->use_otp_profile)
 		schedule_work(&chip->batt_profile_init);
 
@@ -6244,7 +6210,6 @@ static int fg_probe(struct spmi_device *spmi)
 	INIT_DELAYED_WORK(&chip->update_sram_data, update_sram_data_work);
 	INIT_DELAYED_WORK(&chip->update_temp_work, update_temp_data);
 	INIT_DELAYED_WORK(&chip->check_empty_work, check_empty_work);
-	INIT_DELAYED_WORK(&chip->soc_work, soc_work_fn);
 	INIT_WORK(&chip->rslow_comp_work, rslow_comp_work);
 	INIT_WORK(&chip->fg_cap_learning_work, fg_cap_learning_work);
 	INIT_WORK(&chip->batt_profile_init, batt_profile_init);
@@ -6409,7 +6374,6 @@ cancel_work:
 	cancel_delayed_work_sync(&chip->update_sram_data);
 	cancel_delayed_work_sync(&chip->update_temp_work);
 	cancel_delayed_work_sync(&chip->check_empty_work);
-	cancel_delayed_work_sync(&chip->soc_work);
 	alarm_try_to_cancel(&chip->fg_cap_learning_alarm);
 	cancel_work_sync(&chip->set_resume_soc_work);
 	cancel_work_sync(&chip->fg_cap_learning_work);
@@ -6467,9 +6431,6 @@ static void check_and_update_sram_data(struct fg_chip *chip)
 
 	queue_delayed_work(system_power_efficient_wq,
 		&chip->update_sram_data, msecs_to_jiffies(time_left * 1000));
-
-	queue_delayed_work(system_power_efficient_wq,
-		&chip->soc_work, msecs_to_jiffies(SOC_WORK_MS));
 }
 
 static int fg_suspend(struct device *dev)
@@ -6479,7 +6440,6 @@ static int fg_suspend(struct device *dev)
 	if (!chip->sw_rbias_ctrl)
 		return 0;
 
-	cancel_delayed_work(&chip->soc_work);
 	cancel_delayed_work(&chip->update_temp_work);
 	cancel_delayed_work(&chip->update_sram_data);
 

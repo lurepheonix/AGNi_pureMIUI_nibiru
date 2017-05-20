@@ -3483,7 +3483,7 @@ static int hotplug_init_cpu_offlined(void)
 	long temp = 0;
 	uint32_t cpu = 0;
 
-	if (!hotplug_enabled || !hotplug_task)
+	if (!hotplug_enabled)
 		return 0;
 
 	mutex_lock(&core_control_mutex);
@@ -3500,7 +3500,8 @@ static int hotplug_init_cpu_offlined(void)
 
 		if (temp >= msm_thermal_info.hotplug_temp_degC)
 			cpus[cpu].offline = 1;
-		else
+		else if (temp <= (msm_thermal_info.hotplug_temp_degC -
+			msm_thermal_info.hotplug_temp_hysteresis_degC))
 			cpus[cpu].offline = 0;
 	}
 	mutex_unlock(&core_control_mutex);
@@ -3703,13 +3704,6 @@ static void freq_mitigation_init(void)
 		goto init_freq_thread;
 
 	for_each_possible_cpu(cpu) {
-		/*
-		 * Hotplug may not be enabled,
-		 * make sure core sensor id is initialized.
-		 */
-		cpus[cpu].sensor_id =
-			sensor_get_id((char *)cpus[cpu].sensor_type);
-		cpus[cpu].id_type = THERM_ZONE_ID;
 		if (!(msm_thermal_info.freq_mitig_control_mask & BIT(cpu)))
 			continue;
 		hi_thresh = &cpus[cpu].threshold[FREQ_THRESHOLD_HIGH];
@@ -5261,6 +5255,9 @@ int msm_thermal_pre_init(struct device *dev)
 		goto pre_init_exit;
 	}
 
+	if (!tsens_temp_at_panic)
+		msm_thermal_panic_notifier_init(dev);
+
 	if (!thresh) {
 		thresh = kzalloc(
 				sizeof(struct threshold_info) * MSM_LIST_MAX_NR,
@@ -5416,7 +5413,6 @@ int msm_thermal_init(struct msm_thermal_data *pdata)
 		cpus_previously_online_update();
 		register_cpu_notifier(&msm_thermal_cpu_notifier);
 	}
-	msm_thermal_panic_notifier_init(&pdata->pdev->dev);
 
 	return ret;
 }
@@ -7685,7 +7681,7 @@ int __init msm_thermal_late_init(void)
 	if (!msm_thermal_probed)
 		return 0;
 
-	if (num_possible_cpus() > 1 && core_control_enabled)
+	if (num_possible_cpus() > 1)
 		msm_thermal_add_cc_nodes();
 	msm_thermal_add_psm_nodes();
 	msm_thermal_add_vdd_rstr_nodes();

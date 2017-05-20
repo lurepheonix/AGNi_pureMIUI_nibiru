@@ -82,6 +82,7 @@
 #include <asm/tlb.h>
 #include <asm/irq_regs.h>
 #include <asm/mutex.h>
+#include <asm/relaxed.h>
 #ifdef CONFIG_PARAVIRT
 #include <asm/paravirt.h>
 #endif
@@ -5063,6 +5064,18 @@ static void calc_load_account_active(struct rq *this_rq)
 	this_rq->calc_load_update += LOAD_FREQ;
 }
 
+unsigned long get_avg_nr_running(unsigned int cpu)
+{
+	struct rq *q;
+
+	if (cpu >= nr_cpu_ids)
+		return 0;
+
+	q = cpu_rq(cpu);
+
+	return q->ave_nr_running;
+}
+
 /*
  * End of global load-average stuff
  */
@@ -6491,6 +6504,23 @@ int idle_cpu(int cpu)
 	return 1;
 }
 
+int idle_cpu_relaxed(int cpu)
+{
+	struct rq *rq = cpu_rq(cpu);
+
+	if (cpu_relaxed_read_long(&rq->curr) != (u64)rq->idle)
+		return 0;
+
+	if (cpu_relaxed_read(&rq->nr_running))
+		return 0;
+
+#ifdef CONFIG_SMP
+	if (!llist_empty_relaxed(&rq->wake_list))
+		return 0;
+#endif
+
+	return 1;
+}
 /**
  * idle_task - return the idle task for a given cpu.
  * @cpu: the processor in question.
